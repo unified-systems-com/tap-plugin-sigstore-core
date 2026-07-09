@@ -11,7 +11,6 @@ needed; no network call is made; no other plugin's artifacts are touched.
 from __future__ import annotations
 
 import pytest
-
 from tap_plugin.sigstore_core.decompose import GriftFragment, bundle_to_grift_fragment
 from tap_plugin.sigstore_core.verify import (
     PUBLIC_GOOD_FULCIO_URL,
@@ -329,7 +328,7 @@ class TestDeterministicEntityIds:
 
 class TestDimensionPropagation:
     def test_caller_dimensions_applied_to_all_pieces(self) -> None:
-        dims = {"sigstore.platform": "public-good", "samsite.scope": "compliance"}
+        dims = {"sigstore.platform": "public-good", "example.scope": "compliance"}
         fragment = bundle_to_grift_fragment(
             _good_result(),
             anchor_entity_id="anchor-1",

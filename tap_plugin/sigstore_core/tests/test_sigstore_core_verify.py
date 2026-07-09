@@ -14,7 +14,6 @@ from __future__ import annotations
 import dataclasses
 
 import pytest
-
 from tap_plugin.sigstore_core.verify import (
     GitHubWorkflowPolicy,
     VerificationResult,
