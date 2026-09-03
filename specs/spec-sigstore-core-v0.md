@@ -100,6 +100,7 @@ template to borrow from here.
 ### Plugin Scope
 ----
 RID: `req-sigstore-core-scope`
+
 Status: `Implemented`
 
 `sigstore_core` is a library plugin that ships:
@@ -127,6 +128,7 @@ graph surface is the model and edge types other plugins write to.
 ### Model Set
 ----
 RID: `req-sigstore-core-models`
+
 Status: `Implemented`
 
 The v0 model set is intentionally small. Two node types cover the trust chain
@@ -205,6 +207,7 @@ Vocabulary](#edge-vocabulary).
 ### Edge Vocabulary
 ----
 RID: `req-sigstore-core-edges`
+
 Status: `Implemented`
 
 Edges express the trust chain a verifier walks from a signed entity to the CA
@@ -314,6 +317,7 @@ itself.
 ### No Collector In v0
 ----
 RID: `req-sigstore-core-no-collector`
+
 Status: `Implemented`
 
 The plugin registers no `tap_cares` collector capability in v0. Bundle
@@ -336,6 +340,7 @@ explicitly deferred in non-goals.
 ### Verify Helper
 ----
 RID: `req-sigstore-core-verify`
+
 Status: `Implemented`
 
 `sigstore_core.verify` exposes the canonical verification function every TAP
@@ -409,6 +414,7 @@ refresh side-effect inside `sigstore-python` and the returned result.
 ### Decompose Helper
 ----
 RID: `req-sigstore-core-decompose`
+
 Status: `Implemented`
 
 `sigstore_core.decompose` exposes the canonical decomposition function that
@@ -464,6 +470,7 @@ Behavior:
 ### Verification Policy Shape
 ----
 RID: `req-sigstore-core-policy`
+
 Status: `Implemented`
 
 The `policy` argument to `verify_bundle` is a typed descriptor that names the
@@ -521,6 +528,7 @@ arrive. The v0 spec does not attempt to enumerate them.
 ### Dimension Strategy
 ----
 RID: `req-sigstore-core-dimensions`
+
 Status: `Implemented`
 
 Sigstore is treated as its own platform. The plugin uses flat,
@@ -550,6 +558,7 @@ change.
 ### Plugin Python Dependency
 ----
 RID: `req-sigstore-core-python-deps`
+
 Status: `Implemented`
 
 The `sigstore` Python library is owned by `sigstore_core` and declared in
@@ -588,6 +597,7 @@ dependency is justified by and documented with `sigstore_core`.
 ### Verification Disclosure
 ----
 RID: `req-sigstore-core-disclosure`
+
 Status: `Implemented`
 
 Per [[disclose-shortcuts-machine-readably]], the verification result the
@@ -630,6 +640,7 @@ mode this requirement exists to prevent.
 ### Live-Bundle Verification Testing (Backlog)
 ----
 RID: `req-sigstore-core-testing-backlog`
+
 Status: `Backlog`
 
 v0 ships **hermetic unit tests only**. The set of behaviors exercised at v0 ship is intentionally limited to what can be tested without touching the network, without reaching into another plugin's artifacts, and without publishing anything to the public-good Rekor log:
@@ -667,6 +678,7 @@ The right long-term shape is the harness, not vendored fixtures. Vendoring is th
 ### v0 Non-Goals
 ----
 RID: `req-sigstore-core-nongoals`
+
 Status: `Implemented`
 
 Out of scope for v0:
