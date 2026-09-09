@@ -18,3 +18,8 @@ CERT_ISSUED_BY__sigstore_core = "edges/CERT_ISSUED_BY.edge.json"
 SIGNED_BY_IDENTITY__sigstore_core = "edges/SIGNED_BY_IDENTITY.edge.json"
 IDENTITY_VOUCHED_BY__sigstore_core = "edges/IDENTITY_VOUCHED_BY.edge.json"
 REQUESTS_SIGSTORE_SIGNATURE__sigstore_core = "edges/REQUESTS_SIGSTORE_SIGNATURE.edge.json"
+
+[[boot.records]]
+name = "ci"
+description = "RESERVED NAME (req-boot-bootstrap-ci-record): the stack this plugin's own tests run in — depends_on closure + self, offline, credential-free. The consumer flips self to editable."
+sha256 = "2642c59d8afc757ff061612763da262fa9d34ba1ca35328218d9118a8ce5e8d9"
