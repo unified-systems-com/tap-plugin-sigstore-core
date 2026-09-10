@@ -2,7 +2,7 @@
 
 Stores immutable transparency-log facts only. The verification verdict
 (`signature_verified`), the policy that produced it, and any failure
-code/detail live as attributes on the `ATTESTED_BY` edge from the signed
+code/detail live as attributes on the `ATTESTED_BY_LOG_ENTRY` edge from the signed
 entity to this node, not as fields here.
 
 Spec: plugins/sigstore_core/specs/spec-sigstore-core-v0.md
@@ -44,7 +44,7 @@ class RekorLogEntry(BaseModel):
         }
     }
     # The signing identity's OIDC issuer is an authoritative scalar field; the
-    # IDENTITY_VOUCHED_BY edge to the matching oidc_issuer node must mirror it
+    # IDENTITY_VOUCHED_BY_ISSUER edge to the matching oidc_issuer node must mirror it
     # exactly. Hotlink makes that drift-impossible (req-grid-hotlink). Uses the
     # `scalar` selector since the field's value IS the identifier.
     HOTLINKS: ClassVar[list[dict]] = [
@@ -54,7 +54,7 @@ class RekorLogEntry(BaseModel):
             "selector_type": "scalar",
             "selector": "",
             "edge_direction": "outbound",
-            "edge_type": "IDENTITY_VOUCHED_BY__sigstore_core",
+            "edge_type": "IDENTITY_VOUCHED_BY_ISSUER__sigstore_core",
             "mode": "exact",
         }
     ]

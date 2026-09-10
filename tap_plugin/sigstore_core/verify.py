@@ -40,7 +40,7 @@ class GitHubWorkflowPolicy:
     ``oidc_issuer`` and ``github_repository`` are required (repo-level
     binding is the weakest useful identity check). The optional fields
     tighten the check; the applied predicates are recorded on the
-    ATTESTED_BY edge so the verdict is interpretable later.
+    ATTESTED_BY_LOG_ENTRY edge so the verdict is interpretable later.
 
     Spec: req-sigstore-core-policy-2.
     """
