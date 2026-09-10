@@ -1,6 +1,6 @@
 {
-  "slug": "CERT_ISSUED_BY__sigstore_core",
-  "name": "Cert Issued By",
+  "slug": "CERT_ISSUED_BY_CA__sigstore_core",
+  "name": "Cert Issued By CA",
   "description": "The signing cert that produced this Rekor entry's Sigstore signature was issued by this CA.",
   "sources": ["sigstore_core__rekor_log_entry"],
   "targets": ["sigstore_core__sigstore_ca"],

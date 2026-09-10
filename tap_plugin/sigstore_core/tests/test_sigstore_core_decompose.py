@@ -83,7 +83,7 @@ class TestFourPieceFragment:
             policy=_policy(),
             dimensions={},
         )
-        # 2 entities (sigstore_ca + rekor_log_entry), 2 edges (CERT_ISSUED_BY + ATTESTED_BY)
+        # 2 entities (sigstore_ca + rekor_log_entry), 2 edges (CERT_ISSUED_BY_CA + ATTESTED_BY_LOG_ENTRY)
         assert len(fragment.entities) == 2
         assert len(fragment.edges) == 2
 
@@ -105,7 +105,7 @@ class TestFourPieceFragment:
             dimensions={},
         )
         types = {e["edge_type"] for e in fragment.edges}
-        assert types == {"CERT_ISSUED_BY__sigstore_core", "ATTESTED_BY__sigstore_core"}
+        assert types == {"CERT_ISSUED_BY_CA__sigstore_core", "ATTESTED_BY_LOG_ENTRY__sigstore_core"}
 
 
 class TestFivePieceFragmentWithIdentity:
@@ -128,8 +128,8 @@ class TestFivePieceFragmentWithIdentity:
         assert len(fragment.edges) == 4
         types = {e["edge_type"] for e in fragment.edges}
         assert types == {
-            "CERT_ISSUED_BY__sigstore_core",
-            "ATTESTED_BY__sigstore_core",
+            "CERT_ISSUED_BY_CA__sigstore_core",
+            "ATTESTED_BY_LOG_ENTRY__sigstore_core",
             "SIGNED_BY_IDENTITY__sigstore_core",
             "REQUESTS_SIGSTORE_SIGNATURE__sigstore_core",
         }
@@ -185,7 +185,7 @@ class TestFailedVerdictEmitted:
             policy=_policy(),
             dimensions={},
         )
-        attested = next(e for e in fragment.edges if e["edge_type"] == "ATTESTED_BY__sigstore_core")
+        attested = next(e for e in fragment.edges if e["edge_type"] == "ATTESTED_BY_LOG_ENTRY__sigstore_core")
         assert attested["properties"]["signature_verified"] is False
         assert attested["properties"]["verification_failure_code"] == "policy_mismatch"
         assert attested["properties"]["verification_failure_detail"] == "wrong repo"
@@ -202,7 +202,7 @@ class TestAttestedByPolicyAttributes:
             policy=_policy(),
             dimensions={},
         )
-        attested = next(e for e in fragment.edges if e["edge_type"] == "ATTESTED_BY__sigstore_core")
+        attested = next(e for e in fragment.edges if e["edge_type"] == "ATTESTED_BY_LOG_ENTRY__sigstore_core")
         assert attested["properties"]["policy_kind"] == "github_core__github_workflow"
         assert attested["properties"]["policy_oidc_issuer"] == "https://token.actions.githubusercontent.com"
         assert attested["properties"]["policy_github_repository"] == "example/repo"
@@ -221,7 +221,7 @@ class TestAttestedByPolicyAttributes:
             policy=policy,
             dimensions={},
         )
-        attested = next(e for e in fragment.edges if e["edge_type"] == "ATTESTED_BY__sigstore_core")
+        attested = next(e for e in fragment.edges if e["edge_type"] == "ATTESTED_BY_LOG_ENTRY__sigstore_core")
         assert attested["properties"]["policy_workflow_identity_uri"].endswith("@refs/heads/main")
         assert attested["properties"]["policy_workflow_ref"] == "refs/heads/main"
         assert attested["properties"]["policy_workflow_sha"].startswith("0123456789")
@@ -233,7 +233,7 @@ class TestAttestedByPolicyAttributes:
             policy=_policy(),  # only required fields
             dimensions={},
         )
-        attested = next(e for e in fragment.edges if e["edge_type"] == "ATTESTED_BY__sigstore_core")
+        attested = next(e for e in fragment.edges if e["edge_type"] == "ATTESTED_BY_LOG_ENTRY__sigstore_core")
         for absent_key in ("policy_workflow_identity_uri", "policy_workflow_ref", "policy_workflow_sha"):
             assert absent_key not in attested["properties"]
 
@@ -257,7 +257,7 @@ class TestRekorLogEntryFields:
         """req-sigstore-core-models-3: rekor_log_entry carries only immutable facts.
 
         Verdict, policy attrs, and failure code/detail must NOT appear as fields
-        on the node — they live on ATTESTED_BY.
+        on the node — they live on ATTESTED_BY_LOG_ENTRY.
         """
         fragment = bundle_to_grift_fragment(
             _good_result(signature_verified=False),

@@ -10,7 +10,7 @@
   - `sigstore_core.verify.verify_bundle(body, bundle, *, policy)` — verifies a Sigstore bundle; returns a `VerificationResult`. See `req-sigstore-core-verify`.
   - `sigstore_core.decompose.bundle_to_grift_fragment(result, *, anchor_entity_id, policy, dimensions, signing_identity_entity_id=None)` — turns a verified bundle into a `GriftFragment` callers merge into their own GRIFT batch. See `req-sigstore-core-decompose`.
 - **Models** (see `req-sigstore-core-models`): `rekor_log_entry`, `sigstore_ca`.
-- **Edge types** (see `req-sigstore-core-edges`): `ATTESTED_BY`, `CERT_ISSUED_BY`, `SIGNED_BY_IDENTITY`.
+- **Edge types** (see `req-sigstore-core-edges`): `ATTESTED_BY_LOG_ENTRY`, `CERT_ISSUED_BY_CA`, `SIGNED_BY_IDENTITY`.
 - **Default dimensions** (see `req-sigstore-core-dimensions`):
   - `sigstore.platform = "public-good"` on every `sigstore_core`-owned node and edge.
   - `sigstore.ca_kind = "fulcio"` on `sigstore_ca` nodes.
@@ -76,9 +76,9 @@ template to borrow from here.
 | 3. | Single Verify Surface | One canonical `verify_bundle` helper that every TAP plugin uses to verify a Sigstore bundle. |
 | 4. | Bundle-Decompose Helper | One canonical helper that turns a verified bundle into a GRIFT fragment consumers merge into their batch. |
 | 5. | Plugin-Owned Dep | The `sigstore` Python library is declared in `plugins/sigstore_core/pyproject.toml` via the root uv workspace pattern, following the precedent github_core landed for `PyYAML` (first proof of `req-plugin-arch-python-deps`). Consumers import only from `sigstore_core.*`. |
-| 6. | Polymorphic Anchor | The "signed entity" side of `ATTESTED_BY` is intentionally polymorphic; the plugin does not constrain which entity types may anchor a Rekor entry. |
+| 6. | Polymorphic Anchor | The "signed entity" side of `ATTESTED_BY_LOG_ENTRY` is intentionally polymorphic; the plugin does not constrain which entity types may anchor a Rekor entry. |
 | 7. | Rekor-Backed Bundles Only | v0 supports Sigstore bundles whose verification rests on a Rekor transparency-log inclusion proof. Timestamp-only bundles (RFC3161) and non-Rekor transparency networks are explicitly deferred. |
-| 8. | Verdict Lives On The Edge | Verification is a fact about (artifact bytes + bundle + policy + verification time), not an immutable property of the Rekor entry. The verdict and the policy that produced it live on the `ATTESTED_BY` edge; the Rekor entry node stores only immutable transparency-log facts. |
+| 8. | Verdict Lives On The Edge | Verification is a fact about (artifact bytes + bundle + policy + verification time), not an immutable property of the Rekor entry. The verdict and the policy that produced it live on the `ATTESTED_BY_LOG_ENTRY` edge; the Rekor entry node stores only immutable transparency-log facts. |
 
 ## Requirements
 
@@ -86,14 +86,14 @@ template to borrow from here.
 | --- | --- | :---: | --- |
 | req-sigstore-core-scope | [Plugin Scope](#plugin-scope) | Implemented | Library plugin; models + edges + verify/decompose helpers. Installed, migrated, types/edge-constraints registered; consumed by samsite's compliance collector (nodes/edges live on the grid) |
 | req-sigstore-core-models | [Model Set](#model-set) | Implemented | `rekor_log_entry`, `sigstore_ca` |
-| req-sigstore-core-edges | [Edge Vocabulary](#edge-vocabulary) | Implemented | `ATTESTED_BY`, `CERT_ISSUED_BY`, `SIGNED_BY_IDENTITY`, `IDENTITY_VOUCHED_BY` (hotlinked) |
+| req-sigstore-core-edges | [Edge Vocabulary](#edge-vocabulary) | Implemented | `ATTESTED_BY_LOG_ENTRY`, `CERT_ISSUED_BY_CA`, `SIGNED_BY_IDENTITY`, `IDENTITY_VOUCHED_BY_ISSUER` (hotlinked) |
 | req-sigstore-core-no-collector | [No Collector In v0](#no-collector-in-v0) | Implemented | `apps.py` is `pass`; no `tap_cares` registration |
 | req-sigstore-core-verify | [Verify Helper](#verify-helper) | Implemented | `sigstore_core.verify.verify_bundle(...)` exists with documented signature, three-state result, failure codes, and Rekor-only enforcement. Consumer migration (samsite, `-8`) is done — its inline verify module was removed and it now calls `verify_bundle`. |
-| req-sigstore-core-decompose | [Decompose Helper](#decompose-helper) | Implemented | `sigstore_core.decompose.bundle_to_grift_fragment(...)` exists; returns `GriftFragment` with the documented pieces (CA + entry + 2 edges, plus optional `SIGNED_BY_IDENTITY` and hotlinked `IDENTITY_VOUCHED_BY`) |
+| req-sigstore-core-decompose | [Decompose Helper](#decompose-helper) | Implemented | `sigstore_core.decompose.bundle_to_grift_fragment(...)` exists; returns `GriftFragment` with the documented pieces (CA + entry + 2 edges, plus optional `SIGNED_BY_IDENTITY` and hotlinked `IDENTITY_VOUCHED_BY_ISSUER`) |
 | req-sigstore-core-policy | [Verification Policy Shape](#verification-policy-shape) | Implemented | `GitHubWorkflowPolicy` dataclass + translation to `sigstore-python` policy live in `verify.py` |
 | req-sigstore-core-dimensions | [Dimension Strategy](#dimension-strategy) | Implemented | `sigstore.platform`, `sigstore.ca_kind`, `sigstore.log_kind` set on model defaults and edge defaults |
 | req-sigstore-core-python-deps | [Plugin Python Dependency](#plugin-python-dependency) | Implemented | `sigstore` is plugin-owned: declared in `plugins/sigstore_core/pyproject.toml`, registered as a `[tool.uv.workspace]` member, removed from the root `pyproject.toml`. Installs via `uv sync --all-packages`, mirroring github_core's PyYAML |
-| req-sigstore-core-disclosure | [Verification Disclosure](#verification-disclosure) | Implemented | Verdict + failure code/detail + applied policy live as `ATTESTED_BY` edge attributes per the spec |
+| req-sigstore-core-disclosure | [Verification Disclosure](#verification-disclosure) | Implemented | Verdict + failure code/detail + applied policy live as `ATTESTED_BY_LOG_ENTRY` edge attributes per the spec |
 | req-sigstore-core-testing-backlog | [Live-Bundle Verification Testing (Backlog)](#live-bundle-verification-testing-backlog) | Backlog | v0 ships hermetic unit tests only; happy-path verification against a real Rekor-backed bundle waits for the platform live-integration harness |
 | req-sigstore-core-nongoals | [v0 Non-Goals](#v0-non-goals) | Implemented | RFC3161 bundles, dedicated verification node, live Rekor pull, OIDC issuer node, checkpoint nodes, witness/cosigning, attestations |
 
@@ -106,7 +106,7 @@ Status: `Implemented`
 `sigstore_core` is a library plugin that ships:
 
 - Two TAP model types: `rekor_log_entry` and `sigstore_ca`.
-- Four edge type declarations: `ATTESTED_BY`, `CERT_ISSUED_BY`, `SIGNED_BY_IDENTITY`, and `IDENTITY_VOUCHED_BY` (the last hotlink-backed against `rekor_log_entry.signing_identity_issuer`).
+- Four edge type declarations: `ATTESTED_BY_LOG_ENTRY`, `CERT_ISSUED_BY_CA`, `SIGNED_BY_IDENTITY`, and `IDENTITY_VOUCHED_BY_ISSUER` (the last hotlink-backed against `rekor_log_entry.signing_identity_issuer`).
 - A `sigstore_core.verify` Python module exposing the canonical
   `verify_bundle(...)` function.
 - A `sigstore_core.decompose` Python module exposing the canonical
@@ -123,7 +123,7 @@ graph surface is the model and edge types other plugins write to.
 | --- | --- | :---: | --- | --- |
 | req-sigstore-core-scope-1 | Library Shape | Implemented | The plugin registers no collectors; its public Python API is `sigstore_core.verify` and `sigstore_core.decompose`. | |
 | req-sigstore-core-scope-2 | Models Owned Here | Implemented | `rekor_log_entry` and `sigstore_ca` are owned by `sigstore_core`, not by any consumer plugin. | |
-| req-sigstore-core-scope-3 | Edges Owned Here | Implemented | `ATTESTED_BY`, `CERT_ISSUED_BY`, `SIGNED_BY_IDENTITY`, and `IDENTITY_VOUCHED_BY` are declared by `sigstore_core`. | Consumer plugins emit instances. |
+| req-sigstore-core-scope-3 | Edges Owned Here | Implemented | `ATTESTED_BY_LOG_ENTRY`, `CERT_ISSUED_BY_CA`, `SIGNED_BY_IDENTITY`, and `IDENTITY_VOUCHED_BY_ISSUER` are declared by `sigstore_core`. | Consumer plugins emit instances. |
 
 ### Model Set
 ----
@@ -136,7 +136,7 @@ visible in any Sigstore bundle today.
 
 Models:
 
-- `rekor_log_entry` — one node per `(log_key_id, log_index)` pair. Represents one signed-artifact entry in a Rekor transparency log. Stores only immutable facts about the Rekor entry; verification verdict lives on the `ATTESTED_BY` edge.
+- `rekor_log_entry` — one node per `(log_key_id, log_index)` pair. Represents one signed-artifact entry in a Rekor transparency log. Stores only immutable facts about the Rekor entry; verification verdict lives on the `ATTESTED_BY_LOG_ENTRY` edge.
 - `sigstore_ca` — one node per CA URL. Represents a certificate authority (v0: only the Sigstore public-good Fulcio instance, but `ca_kind` and `ca_url` leave room for private Fulcio deployments and future non-Fulcio CAs).
 
 #### Identity
@@ -182,7 +182,7 @@ for entity identity (it does not survive re-shaping of the entry).
 
 Verification verdict, the policy that produced it, the verification time, and
 failure code/detail are *not* fields on this node — they live on the
-`ATTESTED_BY` edge from the signed entity to this entry. See [Edge
+`ATTESTED_BY_LOG_ENTRY` edge from the signed entity to this entry. See [Edge
 Vocabulary](#edge-vocabulary).
 
 `sigstore_ca`:
@@ -201,7 +201,7 @@ Vocabulary](#edge-vocabulary).
 | --- | --- | :---: | --- | --- |
 | req-sigstore-core-models-1 | Models Declared | Implemented | The plugin declares the two v0 model types listed above. | |
 | req-sigstore-core-models-2 | Deterministic Identity | Implemented | Both models use deterministic UUIDv5 identity based on their natural keys. | |
-| req-sigstore-core-models-3 | Immutable Facts Only | Implemented | `rekor_log_entry` stores only immutable transparency-log facts; verification verdict and policy-applied attributes live on the `ATTESTED_BY` edge, not the node. | A `rekor_log_entry` only exists if `verify_bundle` parsed the bundle. |
+| req-sigstore-core-models-3 | Immutable Facts Only | Implemented | `rekor_log_entry` stores only immutable transparency-log facts; verification verdict and policy-applied attributes live on the `ATTESTED_BY_LOG_ENTRY` edge, not the node. | A `rekor_log_entry` only exists if `verify_bundle` parsed the bundle. |
 | req-sigstore-core-models-4 | CA Kind Field | Implemented | `sigstore_ca.ca_kind` is a string field that defaults to `fulcio` in v0 but is not constrained to it at the model level. | Future non-Fulcio CAs need no schema change. |
 
 ### Edge Vocabulary
@@ -217,21 +217,30 @@ V0 edge types:
 
 | Edge | Direction | Meaning |
 | --- | --- | --- |
-| `ATTESTED_BY` | signed entity -> `rekor_log_entry` | "This entity's signature was logged in Rekor at this entry, verified under this policy at this time." |
-| `CERT_ISSUED_BY` | `rekor_log_entry` -> `sigstore_ca` | "The signing cert for this entry was issued by this CA." |
+| `ATTESTED_BY_LOG_ENTRY` | signed entity -> `rekor_log_entry` | "This entity's signature was logged in Rekor at this entry, verified under this policy at this time." |
+| `CERT_ISSUED_BY_CA` | `rekor_log_entry` -> `sigstore_ca` | "The signing cert for this entry was issued by this CA." |
 | `SIGNED_BY_IDENTITY` | `rekor_log_entry` -> `github_workflow` | "The Fulcio cert for this entry asserts this GitHub workflow as the signing identity." |
-| `IDENTITY_VOUCHED_BY` | `rekor_log_entry` -> `oidc_issuer` | "The signing identity was vouched for by this OIDC issuer (Fulcio bound the cert to an identity from it)." **Hotlink-backed** (`mode: exact`, `scalar` selector): the edge mirrors `rekor_log_entry.signing_identity_issuer` so it cannot drift from the field. Converges with the AWS federation path on the same `oidc_issuer` node (`github_core`-owned). |
+| `IDENTITY_VOUCHED_BY_ISSUER` | `rekor_log_entry` -> `oidc_issuer` | "The signing identity was vouched for by this OIDC issuer (Fulcio bound the cert to an identity from it)." **Hotlink-backed** (`mode: exact`, `scalar` selector): the edge mirrors `rekor_log_entry.signing_identity_issuer` so it cannot drift from the field. Converges with the AWS federation path on the same `oidc_issuer` node (`github_core`-owned). |
 | `REQUESTS_SIGSTORE_SIGNATURE` | `github_workflow` -> `sigstore_ca` | "This workflow requested a keyless signing cert from this Fulcio CA — the cert-request step that precedes the Rekor-logged signature." Unlike the other four (which read as the verifier's walk outward from the entry), this is the *action* edge from the signing identity. Caller-supplied identity (same precondition as `SIGNED_BY_IDENTITY`); emitted by `bundle_to_grift_fragment` when a signing identity resolves. Named specifically to disambiguate from other signing schemes. v0 source narrow (`github_workflow`). |
 
-The source side of `ATTESTED_BY` is intentionally polymorphic. The plugin
+**Renamed 2026-09-09** (`unified-systems-com/tap-plugin-sigstore-core#4`): `ATTESTED_BY` ->
+`ATTESTED_BY_LOG_ENTRY`, `CERT_ISSUED_BY` -> `CERT_ISSUED_BY_CA`, `IDENTITY_VOUCHED_BY` ->
+`IDENTITY_VOUCHED_BY_ISSUER`, to satisfy core's edge-naming rule (`req-tap-plugin-edge-naming`,
+`trailing-preposition`: a slug must name the object it acts on, not end in a preposition).
+Direction is unchanged on all three — the catalog above deliberately reads as the verifier's
+walk outward from the entry, and the issuer edge's source is pinned by the hotlink. Edge ids
+derive from the slug, so migration `0003_retire_renamed_edge_types` deletes rows of the retired
+types on an upgraded grid; the consumer's next collection re-emits them under the new names.
+
+The source side of `ATTESTED_BY_LOG_ENTRY` is intentionally polymorphic. The plugin
 declares the edge type but does not constrain which entity types may anchor a
-Rekor entry. Consumer collectors emit `ATTESTED_BY` from whatever they signed
+Rekor entry. Consumer collectors emit `ATTESTED_BY_LOG_ENTRY` from whatever they signed
 (signed evidence documents, container images, IaC artifacts, attestation
 statements, etc.).
 
-#### ATTESTED_BY Edge Attributes
+#### ATTESTED_BY_LOG_ENTRY Edge Attributes
 
-`ATTESTED_BY` carries the verification verdict and the policy that produced
+`ATTESTED_BY_LOG_ENTRY` carries the verification verdict and the policy that produced
 it. The Rekor entry node is immutable; the same entry can be verified under
 different policies, at different times, with different results, and each
 verdict belongs to the relationship rather than the entry. The edge
@@ -253,7 +262,7 @@ attributes:
 Re-verification under the same policy updates the edge attributes (verdict +
 verified_at + any new failure detail) in place. Verifying the same bundle
 under a *different* policy is a v0 surface limitation: there is one
-`ATTESTED_BY` edge per `(signed entity, rekor_log_entry)` pair, so the second
+`ATTESTED_BY_LOG_ENTRY` edge per `(signed entity, rekor_log_entry)` pair, so the second
 verification overwrites the first. A dedicated `sigstore_verification` node
 type is the v1 candidate for multi-policy / full-history verification (see
 non-goals).
@@ -290,7 +299,7 @@ The `@<ref>` suffix is not part of `github_workflow` identity — one workflow
 definition runs on many refs — so it is not used for matching here. Callers
 that want ref-level binding express it via `GitHubWorkflowPolicy.workflow_ref`
 (verifier-side enforcement) and via the `policy_workflow_ref` attribute on
-the `ATTESTED_BY` edge (so the bound ref is visible without re-running
+the `ATTESTED_BY_LOG_ENTRY` edge (so the bound ref is visible without re-running
 verification).
 
 A declarative grid-link-manifest path (mirroring github_core's
@@ -307,10 +316,10 @@ itself.
 | ACID | Title | Status | Description | Notes |
 | --- | --- | :---: | --- | --- |
 | req-sigstore-core-edges-1 | Trust Chain | Implemented | The four edge types are declared and constrained. | |
-| req-sigstore-core-edges-7 | Issuer Edge Hotlinked | Implemented | `IDENTITY_VOUCHED_BY` (rekor_log_entry -> oidc_issuer) is hotlink-backed (`mode: exact`, `scalar` selector on `signing_identity_issuer`), so the edge cannot drift from the field. Emitted only when the caller supplies a resolved `oidc_issuer` entity id AND the bundle carries a signing issuer. | Caller-supplied target, like `SIGNED_BY_IDENTITY`; the oidc_issuer node is `identity_core`-owned. The hotlink fits here because the rekor entry both stores the issuer and (via its writer) emits the edge — unlike the AWS-side `TRUSTS_ISSUER`. |
-| req-sigstore-core-edges-2 | Polymorphic Anchor | Implemented | `ATTESTED_BY` does not constrain its source entity type at the platform level. | |
-| req-sigstore-core-edges-3 | Decompose Emits CA Chain | Implemented | `bundle_to_grift_fragment` emits exactly one `ATTESTED_BY` and exactly one `CERT_ISSUED_BY` per call. | |
-| req-sigstore-core-edges-4 | Verdict On Edge | Implemented | The verification verdict, the policy that produced it, and the verification time are recorded as attributes of the `ATTESTED_BY` edge, not as fields on `rekor_log_entry`. | |
+| req-sigstore-core-edges-7 | Issuer Edge Hotlinked | Implemented | `IDENTITY_VOUCHED_BY_ISSUER` (rekor_log_entry -> oidc_issuer) is hotlink-backed (`mode: exact`, `scalar` selector on `signing_identity_issuer`), so the edge cannot drift from the field. Emitted only when the caller supplies a resolved `oidc_issuer` entity id AND the bundle carries a signing issuer. | Caller-supplied target, like `SIGNED_BY_IDENTITY`; the oidc_issuer node is `identity_core`-owned. The hotlink fits here because the rekor entry both stores the issuer and (via its writer) emits the edge — unlike the AWS-side `TRUSTS_ISSUER`. |
+| req-sigstore-core-edges-2 | Polymorphic Anchor | Implemented | `ATTESTED_BY_LOG_ENTRY` does not constrain its source entity type at the platform level. | |
+| req-sigstore-core-edges-3 | Decompose Emits CA Chain | Implemented | `bundle_to_grift_fragment` emits exactly one `ATTESTED_BY_LOG_ENTRY` and exactly one `CERT_ISSUED_BY_CA` per call. | |
+| req-sigstore-core-edges-4 | Verdict On Edge | Implemented | The verification verdict, the policy that produced it, and the verification time are recorded as attributes of the `ATTESTED_BY_LOG_ENTRY` edge, not as fields on `rekor_log_entry`. | |
 | req-sigstore-core-edges-5 | Identity Edge Caller-Supplied | Implemented | `SIGNED_BY_IDENTITY` is emitted only when the caller passes a resolved identity entity id to the decompose helper. The helper performs no cross-plugin graph reads of its own. | |
 | req-sigstore-core-edges-6 | Github_Core Optional For Helper | Implemented | The decompose helper runs without `github_core` installed; in that mode `SIGNED_BY_IDENTITY` is simply not emitted (no caller can supply a target entity id). | The `signing_identity_uri` field on the Rekor entry remains, so the identity is still visible as data. |
 
@@ -419,8 +428,8 @@ Status: `Implemented`
 
 `sigstore_core.decompose` exposes the canonical decomposition function that
 turns a verified bundle into the four pieces of graph data the plugin owns: a
-`rekor_log_entry` node, a `sigstore_ca` upsert, a `CERT_ISSUED_BY` edge, and
-an `ATTESTED_BY` edge.
+`rekor_log_entry` node, a `sigstore_ca` upsert, a `CERT_ISSUED_BY_CA` edge, and
+an `ATTESTED_BY_LOG_ENTRY` edge.
 
 Signature shape (v0; subject to refinement during implementation):
 
@@ -441,14 +450,14 @@ the caller's GRIFT batch. The fragment contains:
 - One `sigstore_ca` upsert (deduplicated on `ca_url`; v0 defaults to the
   public-good Fulcio instance when no other CA is detected).
 - One `rekor_log_entry` node with the immutable transparency-log fields described under [Model Set](#model-set), populated from `result`.
-- One `CERT_ISSUED_BY` edge: `rekor_log_entry` -> `sigstore_ca`.
-- One `ATTESTED_BY` edge: anchor entity -> `rekor_log_entry`, with verdict + policy attributes populated from `result` and `policy`.
+- One `CERT_ISSUED_BY_CA` edge: `rekor_log_entry` -> `sigstore_ca`.
+- One `ATTESTED_BY_LOG_ENTRY` edge: anchor entity -> `rekor_log_entry`, with verdict + policy attributes populated from `result` and `policy`.
 - Zero or one `SIGNED_BY_IDENTITY` edge: `rekor_log_entry` -> identity entity. Emitted only when the caller passed a non-`None` `signing_identity_entity_id`. The helper performs no graph reads of its own to resolve this.
 
 Behavior:
 
 - The function refuses to operate on an unparseable bundle (`result.parsed_bundle is None`). The caller decides whether to skip this artifact or record a "no Rekor entry observed" state on the anchor node by some other means.
-- The function emits the rekor_log_entry node and the `ATTESTED_BY` edge even when `result.signature_verified is False`. A failed verdict is still useful graph data (the bundle existed, the entry was logged, the policy rejected it for reason X); silently dropping it would violate the disclosure rule.
+- The function emits the rekor_log_entry node and the `ATTESTED_BY_LOG_ENTRY` edge even when `result.signature_verified is False`. A failed verdict is still useful graph data (the bundle existed, the entry was logged, the policy rejected it for reason X); silently dropping it would violate the disclosure rule.
 - The function does not fetch anything. All data is drawn from `result` and `policy`.
 - Dimensions on emitted nodes and edges are the caller's responsibility; the
   helper applies the `dimensions` dict it was given. Plugin-owned static
@@ -462,10 +471,10 @@ Behavior:
 | ACID | Title | Status | Description | Notes |
 | --- | --- | :---: | --- | --- |
 | req-sigstore-core-decompose-1 | Returns Fragment | Implemented | `bundle_to_grift_fragment` returns a typed object the caller merges into its batch; the helper does not submit GRIFT itself. | |
-| req-sigstore-core-decompose-2 | Documented Pieces | Implemented | The fragment contains the CA upsert, the log-entry node, `CERT_ISSUED_BY`, `ATTESTED_BY`, and — when the caller supplies a resolved signing identity — both `SIGNED_BY_IDENTITY` (the verifier-walk edge, Rekor entry -> identity) and `REQUESTS_SIGSTORE_SIGNATURE` (the action edge, identity -> Fulcio CA), and (when the bundle carries a signing issuer) the hotlinked `IDENTITY_VOUCHED_BY`, and nothing else in v0. | The two identity edges share one precondition (a caller-supplied identity id); see the edge catalog. The oidc_issuer node itself is the caller's to ensure-exists (github_core-owned); the helper emits only the edge. |
+| req-sigstore-core-decompose-2 | Documented Pieces | Implemented | The fragment contains the CA upsert, the log-entry node, `CERT_ISSUED_BY_CA`, `ATTESTED_BY_LOG_ENTRY`, and — when the caller supplies a resolved signing identity — both `SIGNED_BY_IDENTITY` (the verifier-walk edge, Rekor entry -> identity) and `REQUESTS_SIGSTORE_SIGNATURE` (the action edge, identity -> Fulcio CA), and (when the bundle carries a signing issuer) the hotlinked `IDENTITY_VOUCHED_BY_ISSUER`, and nothing else in v0. | The two identity edges share one precondition (a caller-supplied identity id); see the edge catalog. The oidc_issuer node itself is the caller's to ensure-exists (github_core-owned); the helper emits only the edge. |
 | req-sigstore-core-decompose-3 | Unparseable Refused | Implemented | The helper raises if `result.parsed_bundle` is `None`. | Callers must check `verify_bundle` parsed successfully before decomposing. |
 | req-sigstore-core-decompose-4 | No Network Calls | Implemented | The helper reads only `result`; it makes no outbound calls. | |
-| req-sigstore-core-decompose-5 | Failed Verdicts Emitted | Implemented | The helper emits the Rekor entry node and the `ATTESTED_BY` edge with `signature_verified=False` when verification failed but the bundle parsed; it does not silently drop failed verdicts. | |
+| req-sigstore-core-decompose-5 | Failed Verdicts Emitted | Implemented | The helper emits the Rekor entry node and the `ATTESTED_BY_LOG_ENTRY` edge with `signature_verified=False` when verification failed but the bundle parsed; it does not silently drop failed verdicts. | |
 
 ### Verification Policy Shape
 ----
@@ -502,7 +511,7 @@ Callers supply whichever predicates they want enforced. Repo-only callers
 keep the optional fields `None` and accept the weaker "some workflow in this
 repo" verdict; demos that need "this specific workflow signed it" supply the
 exact identity URI and the verdict tightens accordingly. The applied policy
-predicates are recorded on the `ATTESTED_BY` edge attributes so the verdict
+predicates are recorded on the `ATTESTED_BY_LOG_ENTRY` edge attributes so the verdict
 is interpretable later without re-running verification.
 
 Internally `sigstore_core.verify` translates this into the equivalent
@@ -522,7 +531,7 @@ arrive. The v0 spec does not attempt to enumerate them.
 | --- | --- | :---: | --- | --- |
 | req-sigstore-core-policy-1 | Typed Descriptor | Implemented | The `policy` argument is a typed dataclass, not a raw `sigstore-python` policy object. | Keeps `sigstore-python` out of consumer plugins' imports. |
 | req-sigstore-core-policy-2 | GitHub Workflow Policy Shipped | Implemented | `GitHubWorkflowPolicy` is the one concrete policy in v0, with required `oidc_issuer` and `github_repository` plus optional `workflow_identity_uri`, `workflow_ref`, and `workflow_sha` predicates. | |
-| req-sigstore-core-policy-3 | Applied Predicates Recorded | Implemented | The applied policy predicates are captured on the `ATTESTED_BY` edge attributes so a reader can tell which checks the verdict relied on. | Required: `policy_kind`, `policy_oidc_issuer`. Optional: repo, identity URI, ref, SHA. |
+| req-sigstore-core-policy-3 | Applied Predicates Recorded | Implemented | The applied policy predicates are captured on the `ATTESTED_BY_LOG_ENTRY` edge attributes so a reader can tell which checks the verdict relied on. | Required: `policy_kind`, `policy_oidc_issuer`. Optional: repo, identity URI, ref, SHA. |
 | req-sigstore-core-policy-4 | Open To Extension | Implemented | Adding a new policy descriptor does not require changing `verify_bundle`'s signature. | |
 
 ### Dimension Strategy
@@ -606,34 +615,34 @@ implied by absence.
 
 The decompose helper encodes verification status this way:
 
-- `ATTESTED_BY.signature_verified` is the absolute verdict: `True` (verified
+- `ATTESTED_BY_LOG_ENTRY.signature_verified` is the absolute verdict: `True` (verified
   end-to-end against the supplied policy) or `False` (parseable bundle that
   failed some check). The attribute is never `None` on an edge the plugin
-  emits; unparseable bundles never produce an `ATTESTED_BY` edge.
-- `ATTESTED_BY.verification_failure_code` and `verification_failure_detail`
+  emits; unparseable bundles never produce an `ATTESTED_BY_LOG_ENTRY` edge.
+- `ATTESTED_BY_LOG_ENTRY.verification_failure_code` and `verification_failure_detail`
   surface *why* a `False` verdict landed, in a machine-readable shape.
   Consumers MUST NOT rely on log scraping to surface failure modes.
-- `ATTESTED_BY.policy_kind` + `policy_*` attributes record *which policy* the
+- `ATTESTED_BY_LOG_ENTRY.policy_kind` + `policy_*` attributes record *which policy* the
   verdict relied on, so a reader can interpret "verified=True" without
   re-running verification.
 
 Downstream panels and views that read this verdict MUST distinguish the four
 meaningful states explicitly:
 
-- signed entity has an `ATTESTED_BY` edge with `signature_verified=True` -> verified under the recorded policy
-- signed entity has an `ATTESTED_BY` edge with `signature_verified=False` -> failed under the recorded policy (surface `failure_code`)
-- signed entity has no `ATTESTED_BY` edge but the underlying source advertised a bundle -> not observed (parse failed, or upstream omitted the bundle entirely)
-- signed entity has no `ATTESTED_BY` edge and the source advertised no bundle -> not applicable
+- signed entity has an `ATTESTED_BY_LOG_ENTRY` edge with `signature_verified=True` -> verified under the recorded policy
+- signed entity has an `ATTESTED_BY_LOG_ENTRY` edge with `signature_verified=False` -> failed under the recorded policy (surface `failure_code`)
+- signed entity has no `ATTESTED_BY_LOG_ENTRY` edge but the underlying source advertised a bundle -> not observed (parse failed, or upstream omitted the bundle entirely)
+- signed entity has no `ATTESTED_BY_LOG_ENTRY` edge and the source advertised no bundle -> not applicable
 
-Treating "no ATTESTED_BY edge" as silent success is the disclosure failure
+Treating "no ATTESTED_BY_LOG_ENTRY edge" as silent success is the disclosure failure
 mode this requirement exists to prevent.
 
 #### Acceptance Criteria
 
 | ACID | Title | Status | Description | Notes |
 | --- | --- | :---: | --- | --- |
-| req-sigstore-core-disclosure-1 | Absolute Fact On Edge | Implemented | `ATTESTED_BY.signature_verified` records the absolute verdict; consumers derive interpretation, do not store it. | |
-| req-sigstore-core-disclosure-2 | No Implicit Success | Implemented | Absence of an `ATTESTED_BY` edge is "not observed" (or "not applicable"), not "verified." Consumer panels must surface this distinction explicitly. | |
+| req-sigstore-core-disclosure-1 | Absolute Fact On Edge | Implemented | `ATTESTED_BY_LOG_ENTRY.signature_verified` records the absolute verdict; consumers derive interpretation, do not store it. | |
+| req-sigstore-core-disclosure-2 | No Implicit Success | Implemented | Absence of an `ATTESTED_BY_LOG_ENTRY` edge is "not observed" (or "not applicable"), not "verified." Consumer panels must surface this distinction explicitly. | |
 | req-sigstore-core-disclosure-3 | Failure Reason Machine-Readable | Implemented | A `False` verdict carries `verification_failure_code` and `verification_failure_detail` on the edge so consumers can branch on the failure mode. | |
 | req-sigstore-core-disclosure-4 | Applied Policy On Edge | Implemented | The applied policy descriptor is recorded on the edge attributes so the verdict is interpretable later. | |
 
@@ -688,7 +697,7 @@ Out of scope for v0:
   with `failure_code="no_rekor_proof"`. Supporting timestamp-only verification
   is a v1 candidate.
 - A dedicated `sigstore_verification` node type for multi-policy / full-history
-  verification observations. v0 keeps the verdict as `ATTESTED_BY` edge
+  verification observations. v0 keeps the verdict as `ATTESTED_BY_LOG_ENTRY` edge
   attributes; one verdict per `(signed entity, rekor_log_entry)` pair. If a
   later consumer needs to record multiple verdicts (different policies,
   re-verification history) for the same pair, the right shape is a dedicated
@@ -698,7 +707,7 @@ Out of scope for v0:
   proof shipped in the bundle.
 - An `oidc_issuer` node. The OIDC issuer URL is captured as a string field on
   `rekor_log_entry.signing_identity_issuer`; lifting it to its own node and
-  adding an `IDENTITY_VOUCHED_BY` edge from `rekor_log_entry` is near-soon
+  adding an `IDENTITY_VOUCHED_BY_ISSUER` edge from `rekor_log_entry` is near-soon
   work for a follow-up pass.
 - `rekor_log_checkpoint` nodes. The checkpoint fields are captured on the entry
   in v0; if the demo or a later consumer wants checkpoint sharing visible as
@@ -722,9 +731,9 @@ Out of scope for v0:
 | ACID | Title | Status | Description | Notes |
 | --- | --- | :---: | --- | --- |
 | req-sigstore-core-nongoals-1 | RFC3161 Bundles Deferred | Implemented | v0 rejects timestamp-only bundles with `failure_code="no_rekor_proof"`. | Honest demo fence. |
-| req-sigstore-core-nongoals-2 | Dedicated Verification Node Deferred | Implemented | v0 keeps verdict on the `ATTESTED_BY` edge; a `sigstore_verification` node is a v1 candidate for multi-policy / re-verification history. | |
+| req-sigstore-core-nongoals-2 | Dedicated Verification Node Deferred | Implemented | v0 keeps verdict on the `ATTESTED_BY_LOG_ENTRY` edge; a `sigstore_verification` node is a v1 candidate for multi-policy / re-verification history. | |
 | req-sigstore-core-nongoals-3 | Live Rekor Deferred | Implemented | v0 does not query Rekor over the network. | |
-| req-sigstore-core-nongoals-4 | OIDC Issuer Node Shipped | Implemented | No longer deferred: the OIDC issuer is a real node (`oidc_issuer`, github_core-owned) and `rekor_log_entry —IDENTITY_VOUCHED_BY→ oidc_issuer` is hotlink-backed. `signing_identity_issuer` remains on the entry as the authoritative field the hotlink mirrors. | Shipped 2026-05-29 (OIDC-anchor build); converges with the AWS federation path on one issuer node. |
+| req-sigstore-core-nongoals-4 | OIDC Issuer Node Shipped | Implemented | No longer deferred: the OIDC issuer is a real node (`oidc_issuer`, github_core-owned) and `rekor_log_entry —IDENTITY_VOUCHED_BY_ISSUER→ oidc_issuer` is hotlink-backed. `signing_identity_issuer` remains on the entry as the authoritative field the hotlink mirrors. | Shipped 2026-05-29 (OIDC-anchor build); converges with the AWS federation path on one issuer node. |
 | req-sigstore-core-nongoals-5 | Checkpoint Node Deferred | Implemented | v0 captures checkpoint fields on the entry, not as their own node. | |
 | req-sigstore-core-nongoals-6 | Attestation Models Deferred | Implemented | v0 does not lift intoto / DSSE statements to their own node types. | |
 | req-sigstore-core-nongoals-7 | No Signing | Implemented | The plugin never produces a Sigstore signature. | |
