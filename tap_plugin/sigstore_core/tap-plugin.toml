@@ -6,7 +6,7 @@ name = "TAP Sigstore Core"
 description = "Sigstore-ecosystem models and the canonical TAP-side helpers for verifying Sigstore signature bundles and decomposing them into graph data."
 
 depends_on = [
-    { slug = "identity_core", note = "IDENTITY_VOUCHED_BY targets the identity_core__oidc_issuer type (edge/vocabulary dependency — no code import); needs the type registered." },
+    { slug = "identity_core", note = "IDENTITY_VOUCHED_BY_ISSUER targets the identity_core__oidc_issuer type (edge/vocabulary dependency — no code import); needs the type registered." },
 ]
 
 [models]
@@ -14,10 +14,10 @@ sigstore_core__rekor_log_entry = "tap_plugin.sigstore_core.models.rekor_log_entr
 sigstore_core__sigstore_ca = "tap_plugin.sigstore_core.models.sigstore_ca.SigstoreCa"
 
 [edges]
-ATTESTED_BY__sigstore_core = "edges/ATTESTED_BY.edge.json"
-CERT_ISSUED_BY__sigstore_core = "edges/CERT_ISSUED_BY.edge.json"
+ATTESTED_BY_LOG_ENTRY__sigstore_core = "edges/ATTESTED_BY_LOG_ENTRY.edge.json"
+CERT_ISSUED_BY_CA__sigstore_core = "edges/CERT_ISSUED_BY_CA.edge.json"
 SIGNED_BY_IDENTITY__sigstore_core = "edges/SIGNED_BY_IDENTITY.edge.json"
-IDENTITY_VOUCHED_BY__sigstore_core = "edges/IDENTITY_VOUCHED_BY.edge.json"
+IDENTITY_VOUCHED_BY_ISSUER__sigstore_core = "edges/IDENTITY_VOUCHED_BY_ISSUER.edge.json"
 REQUESTS_SIGSTORE_SIGNATURE__sigstore_core = "edges/REQUESTS_SIGSTORE_SIGNATURE.edge.json"
 
 [[boot.records]]

@@ -12,7 +12,7 @@ into `sigstore_core` to verify and decompose.
 ## What this plugin owns
 
 - Models — `rekor_log_entry`, `sigstore_ca`
-- Edge types — `ATTESTED_BY`, `CERT_ISSUED_BY`, `SIGNED_BY_IDENTITY`
+- Edge types — `ATTESTED_BY_LOG_ENTRY`, `CERT_ISSUED_BY_CA`, `SIGNED_BY_IDENTITY`
 - Python API:
   - `sigstore_core.verify.verify_bundle(body, bundle, *, policy)` — canonical Sigstore-bundle verifier
   - `sigstore_core.decompose.bundle_to_grift_fragment(...)` — turn a verified bundle into a GRIFT fragment callers merge into their own batch
@@ -25,7 +25,7 @@ The `sigstore` Python library is plugin-owned (declared in
 ## What this plugin does NOT own
 
 - Live Rekor pulling (`rekor.sigstore.dev` queries) — v1 candidate
-- An `oidc_issuer` node or `IDENTITY_VOUCHED_BY` edge — near-soon follow-up
+- An `oidc_issuer` node or `IDENTITY_VOUCHED_BY_ISSUER` edge — near-soon follow-up
 - `rekor_log_checkpoint` nodes — v1
 - intoto / DSSE attestation statement modeling — future
 - Signing anything — TAP only verifies and decomposes
@@ -39,7 +39,7 @@ After consumer collectors call into `bundle_to_grift_fragment`, the demo
 story walks:
 
 ```
-signed_entity --[ATTESTED_BY]--> rekor_log_entry --[CERT_ISSUED_BY]--> sigstore_ca
+signed_entity --[ATTESTED_BY_LOG_ENTRY]--> rekor_log_entry --[CERT_ISSUED_BY_CA]--> sigstore_ca
                                        |
                                        +--[SIGNED_BY_IDENTITY]--> github_workflow
                                           (caller-supplied entity id)
@@ -56,7 +56,7 @@ The `rekor_log_entry` node stores only immutable transparency-log facts
 (`log_key_id`, `log_index`, `integrated_time`, etc.). The verification
 verdict — `signature_verified`, the policy that produced it, the applied
 predicates, the failure code and detail — lives as **attributes on the
-`ATTESTED_BY` edge**. This is intentional: verification is a fact about
+`ATTESTED_BY_LOG_ENTRY` edge**. This is intentional: verification is a fact about
 `(artifact bytes + bundle + policy + verification time)`, not an immutable
 property of the Rekor entry.
 

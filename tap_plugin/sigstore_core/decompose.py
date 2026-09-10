@@ -2,8 +2,8 @@
 
 Takes a verified bundle (a ``VerificationResult`` from ``verify_bundle``)
 and turns it into the slice of graph data ``sigstore_core`` owns: one
-``rekor_log_entry`` node, one ``sigstore_ca`` upsert, one ``CERT_ISSUED_BY``
-edge, one ``ATTESTED_BY`` edge, and (when the caller supplies a resolved
+``rekor_log_entry`` node, one ``sigstore_ca`` upsert, one ``CERT_ISSUED_BY_CA``
+edge, one ``ATTESTED_BY_LOG_ENTRY`` edge, and (when the caller supplies a resolved
 identity entity id) one ``SIGNED_BY_IDENTITY`` edge.
 
 The helper performs no graph reads or writes. It returns a ``GriftFragment``
@@ -57,7 +57,7 @@ def _edge_id(edge_type: str, source: str, target: str) -> str:
 
 
 def _policy_attrs(policy: VerificationPolicy) -> dict[str, str]:
-    """Encode the applied policy into ATTESTED_BY edge attributes.
+    """Encode the applied policy into ATTESTED_BY_LOG_ENTRY edge attributes.
 
     Spec: req-sigstore-core-policy-3, req-sigstore-core-disclosure-4.
     """
@@ -95,9 +95,9 @@ def bundle_to_grift_fragment(
     Args:
         result: A ``VerificationResult`` from ``verify_bundle``. ``result.parsed_bundle``
             must not be ``None`` (caller must check this before calling).
-        anchor_entity_id: Entity id of the signed entity. The ``ATTESTED_BY``
+        anchor_entity_id: Entity id of the signed entity. The ``ATTESTED_BY_LOG_ENTRY``
             edge source.
-        policy: The policy that produced ``result``. Encoded as ATTESTED_BY edge attributes.
+        policy: The policy that produced ``result``. Encoded as ATTESTED_BY_LOG_ENTRY edge attributes.
         dimensions: Dimensions to apply to emitted nodes/edges (the caller's
             envelope-level dimensions; model defaults handle ``sigstore.*`` ones).
         signing_identity_entity_id: Optional. If supplied, the helper emits a
@@ -105,7 +105,7 @@ def bundle_to_grift_fragment(
             The helper performs no graph reads to resolve this — that's the
             caller's job (per req-sigstore-core-edges-5).
         oidc_issuer_entity_id: Optional. If supplied AND the bundle carries a
-            signing issuer, the helper emits a hotlink-backed ``IDENTITY_VOUCHED_BY``
+            signing issuer, the helper emits a hotlink-backed ``IDENTITY_VOUCHED_BY_ISSUER``
             edge from the Rekor entry to this ``oidc_issuer`` node, carrying
             ``properties.hotlink`` so the edge mirrors ``signing_identity_issuer``
             (req-grid-hotlink, mode exact). Caller-resolved, like the identity edge.
@@ -142,7 +142,7 @@ def bundle_to_grift_fragment(
     )
 
     # rekor_log_entry node. Immutable transparency-log facts only — verdict
-    # lives on the ATTESTED_BY edge below.
+    # lives on the ATTESTED_BY_LOG_ENTRY edge below.
     entry_natural_key = f"{result.log_key_id}#{result.rekor_log_index}"
     entry_id = _entity_id("sigstore_core__rekor_log_entry", entry_natural_key)
     fragment.entities.append(
@@ -162,18 +162,18 @@ def bundle_to_grift_fragment(
         }
     )
 
-    # CERT_ISSUED_BY: rekor_log_entry → sigstore_ca
+    # CERT_ISSUED_BY_CA: rekor_log_entry → sigstore_ca
     fragment.edges.append(
         {
-            "edge_type": "CERT_ISSUED_BY__sigstore_core",
-            "edge_id": _edge_id("CERT_ISSUED_BY__sigstore_core", entry_id, ca_id),
+            "edge_type": "CERT_ISSUED_BY_CA__sigstore_core",
+            "edge_id": _edge_id("CERT_ISSUED_BY_CA__sigstore_core", entry_id, ca_id),
             "source_entity_id": entry_id,
             "target_entity_id": ca_id,
             "dimensions": dict(dimensions),
         }
     )
 
-    # ATTESTED_BY: anchor → rekor_log_entry, carrying verdict + applied policy.
+    # ATTESTED_BY_LOG_ENTRY: anchor → rekor_log_entry, carrying verdict + applied policy.
     attested_attrs: dict[str, Any] = {
         "signature_verified": bool(result.signature_verified),
         "verified_at": result.verified_at,
@@ -183,8 +183,8 @@ def bundle_to_grift_fragment(
     attested_attrs.update(_policy_attrs(policy))
     fragment.edges.append(
         {
-            "edge_type": "ATTESTED_BY__sigstore_core",
-            "edge_id": _edge_id("ATTESTED_BY__sigstore_core", anchor_entity_id, entry_id),
+            "edge_type": "ATTESTED_BY_LOG_ENTRY__sigstore_core",
+            "edge_id": _edge_id("ATTESTED_BY_LOG_ENTRY__sigstore_core", anchor_entity_id, entry_id),
             "source_entity_id": anchor_entity_id,
             "target_entity_id": entry_id,
             "properties": attested_attrs,
@@ -217,7 +217,7 @@ def bundle_to_grift_fragment(
             }
         )
 
-    # IDENTITY_VOUCHED_BY: hotlink-backed edge to the OIDC issuer (caller-
+    # IDENTITY_VOUCHED_BY_ISSUER: hotlink-backed edge to the OIDC issuer (caller-
     # supplied target). Emitted only when the bundle carries a signing issuer —
     # otherwise the rekor node's signing_identity_issuer field is empty and the
     # exact-mode hotlink expects zero edges. properties.hotlink mirrors that
@@ -225,8 +225,8 @@ def bundle_to_grift_fragment(
     if oidc_issuer_entity_id is not None and result.signing_issuer:
         fragment.edges.append(
             {
-                "edge_type": "IDENTITY_VOUCHED_BY__sigstore_core",
-                "edge_id": _edge_id("IDENTITY_VOUCHED_BY__sigstore_core", entry_id, oidc_issuer_entity_id),
+                "edge_type": "IDENTITY_VOUCHED_BY_ISSUER__sigstore_core",
+                "edge_id": _edge_id("IDENTITY_VOUCHED_BY_ISSUER__sigstore_core", entry_id, oidc_issuer_entity_id),
                 "source_entity_id": entry_id,
                 "target_entity_id": oidc_issuer_entity_id,
                 "properties": {
